@@ -1,0 +1,12 @@
+{
+  "name": "surround-cast",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local multi-phone synchronized music broadcaster with surround-style speaker roles.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

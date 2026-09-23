@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SurroundCast</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="stage">
+        <div class="brand">
+          <div>
+            <p class="eyebrow">Local phone speaker array</p>
+            <h1>SurroundCast</h1>
+          </div>
+          <span id="connectionBadge" class="badge">Connecting</span>
+        </div>
+
+        <canvas id="roomCanvas" width="900" height="520" aria-label="Speaker room visualization"></canvas>
+
+        <div id="youtubePanel" class="youtubeFrame">
+          <div id="youtubePlayer"></div>
+          <div id="youtubeStatus" class="youtubeStatus" aria-live="polite"></div>
+        </div>
+
+        <div class="transport">
+          <button id="armBtn" type="button">Arm speaker</button>
+          <button id="playBtn" class="primary" type="button">Play in sync</button>
+          <button id="pauseBtn" type="button">Pause</button>
+          <button id="stopBtn" type="button">Stop</button>
+          <label class="fileBtn">
+            Load track
+            <input id="fileInput" type="file" accept="audio/*">
+          </label>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="block">
+          <label for="deviceName">This device</label>
+          <input id="deviceName" maxlength="40" autocomplete="off">
+        </div>
+
+        <div class="block">
+          <label for="roleSelect">Speaker role</label>
+          <select id="roleSelect">
+            <option value="full">Full range</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+            <option value="center">Center vocal</option>
+            <option value="sub">Subwoofer</option>
+            <option value="ambient">Rear ambient</option>
+          </select>
+        </div>
+
+        <div class="block">
+          <label for="latencyTrim">Delay trim <span id="latencyValue">0 ms</span></label>
+          <input id="latencyTrim" type="range" min="-250" max="250" step="5" value="0">
+        </div>
+
+        <div class="block">
+          <label for="effectAmount">Effect amount <span id="effectValue">70%</span></label>
+          <input id="effectAmount" type="range" min="0" max="100" step="1" value="70">
+        </div>
+
+        <div class="block track">
+          <span>Current track</span>
+          <strong id="trackName">No track loaded</strong>
+        </div>
+
+        <div class="block youtube">
+          <label for="youtubeUrl">YouTube link</label>
+          <input id="youtubeUrl" type="url" placeholder="https://youtu.be/...">
+          <button id="loadYoutubeBtn" type="button">Load YouTube</button>
+        </div>
+
+        <div class="block">
+          <span>Sync health</span>
+          <div class="metric">
+            <span>Clock offset</span>
+            <strong id="offsetMetric">...</strong>
+          </div>
+          <div class="metric">
+            <span>Round trip</span>
+            <strong id="rttMetric">...</strong>
+          </div>
+        </div>
+
+        <div class="block">
+          <span>Connected speakers</span>
+          <div id="deviceList" class="devices"></div>
+        </div>
+      </aside>
+    </main>
+
+    <audio id="player" crossorigin="anonymous"></audio>
+    <script src="/app.js"></script>
+  </body>
+</html>
