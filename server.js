@@ -1,3 +1,4 @@
+const { spawn } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
@@ -297,14 +298,21 @@ function handleMessage(client, message) {
       return;
     }
 
-    const meta = {
-      source: "youtube",
-      videoId,
-      name: String(message.name || `YouTube ${videoId}`).slice(0, 120),
-      version: Date.now()
-    };
-    saveTrackMeta(meta);
-    broadcast({ type: "youtube-ready", track: meta });
+    const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const trackName = String(message.name || `YouTube ${videoId}`).slice(0, 120);
+
+    // Attempt direct audio stream resolution so Left, Right, Woofer, Center roles work
+    downloadTrack(ytUrl, trackName, () => {
+      // Fallback to embedded iframe player if download fails
+      const meta = {
+        source: "youtube",
+        videoId,
+        name: trackName,
+        version: Date.now()
+      };
+      saveTrackMeta(meta);
+      broadcast({ type: "youtube-ready", track: meta });
+    });
     return;
   }
 
@@ -315,14 +323,21 @@ function handleMessage(client, message) {
       return;
     }
 
-    const meta = {
-      source: "soundcloud",
-      url,
-      name: String(message.name || "SoundCloud Track").slice(0, 120),
-      version: Date.now()
-    };
-    saveTrackMeta(meta);
-    broadcast({ type: "soundcloud-ready", track: meta });
+    const cleanUrl = url.split("?")[0];
+    const trackName = message.name && message.name !== "SoundCloud Track" ? message.name : "SoundCloud Track";
+
+    // Attempt direct audio stream resolution so Left, Right, Woofer, Center roles work
+    downloadTrack(cleanUrl, trackName, () => {
+      // Fallback to widget mode if download fails
+      const meta = {
+        source: "soundcloud",
+        url: cleanUrl,
+        name: trackName,
+        version: Date.now()
+      };
+      saveTrackMeta(meta);
+      broadcast({ type: "soundcloud-ready", track: meta });
+    });
     return;
   }
 
@@ -354,6 +369,48 @@ function send(client, message) {
 
 function broadcast(message) {
   for (const client of clients.values()) send(client, message);
+}
+
+function downloadTrack(url, defaultName, onFallback) {
+  broadcast({
+    type: "stream-loading",
+    message: `Fetching audio for surround roles (${defaultName})...`
+  });
+
+  const tempFile = path.join(DATA_DIR, `temp-${Date.now()}.mp3`);
+  const proc = spawn("python", [
+    "-m", "yt_dlp",
+    "-x",
+    "--audio-format", "mp3",
+    "--no-playlist",
+    "--max-filesize", "80M",
+    "-o", tempFile,
+    url
+  ]);
+
+  proc.on("close", code => {
+    if (code === 0 && fs.existsSync(tempFile)) {
+      try {
+        fs.copyFileSync(tempFile, TRACK_PATH);
+        fs.unlinkSync(tempFile);
+      } catch {}
+
+      const meta = {
+        name: defaultName,
+        type: "audio/mpeg",
+        size: fs.statSync(TRACK_PATH).size,
+        version: Date.now()
+      };
+      saveTrackMeta(meta);
+      broadcast({ type: "track-ready", track: meta });
+    } else {
+      if (onFallback) onFallback();
+    }
+  });
+
+  proc.on("error", () => {
+    if (onFallback) onFallback();
+  });
 }
 
 function writeFrame(socket, payload, opcode) {

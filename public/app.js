@@ -143,6 +143,12 @@ function handleMessage(message) {
     loadYoutubeVideo(track.videoId);
   }
 
+  if (message.type === "stream-loading") {
+    ui.trackName.textContent = message.message;
+    ui.badge.textContent = "Loading";
+    ui.badge.classList.remove("live");
+  }
+
   if (message.type === "soundcloud-ready") {
     track = message.track;
     sourceMode = "soundcloud";
