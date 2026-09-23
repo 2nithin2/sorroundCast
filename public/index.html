@@ -31,13 +31,15 @@
           <button id="soundcloudTapToPlay" class="tapToPlayBtn" type="button">Tap here to join audio</button>
         </div>
 
+        <button id="audioTapToPlay" class="tapToPlayBtn" type="button">🔊 Tap here to start audio on this device</button>
+
         <div class="transport">
           <button id="armBtn" type="button">Arm speaker</button>
           <button id="playBtn" class="primary" type="button">Play in sync</button>
           <button id="pauseBtn" type="button">Pause</button>
           <button id="stopBtn" type="button">Stop</button>
           <label class="fileBtn">
-            Load track
+            Load file
             <input id="fileInput" type="file" accept="audio/*">
           </label>
         </div>
@@ -77,15 +79,9 @@
         </div>
 
         <div class="block stream-input">
-          <label for="youtubeUrl">YouTube link</label>
-          <input id="youtubeUrl" type="url" placeholder="https://youtu.be/...">
-          <button id="loadYoutubeBtn" type="button">Load YouTube</button>
-        </div>
-
-        <div class="block stream-input">
-          <label for="soundcloudUrl">SoundCloud link</label>
-          <input id="soundcloudUrl" type="url" placeholder="https://soundcloud.com/...">
-          <button id="loadSoundcloudBtn" type="button">Load SoundCloud</button>
+          <label for="linkUrl">Music link (SoundCloud / YouTube)</label>
+          <input id="linkUrl" type="url" placeholder="Paste SoundCloud or YouTube URL...">
+          <button id="loadLinkBtn" class="primary" type="button">Download & Load to MP3</button>
         </div>
 
         <div class="block">

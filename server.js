@@ -87,12 +87,40 @@ const server = http.createServer((req, res) => {
       sendJson(res, 404, { error: "No track uploaded yet." });
       return;
     }
-    res.writeHead(200, {
-      "content-type": track.type || "audio/mpeg",
-      "cache-control": "no-store",
-      "content-disposition": `inline; filename="${asciiFilename(track.name)}"`
-    });
-    fs.createReadStream(TRACK_PATH).pipe(res);
+
+    const stat = fs.statSync(TRACK_PATH);
+    const total = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const partialstart = parts[0];
+      const partialend = parts[1];
+
+      const start = parseInt(partialstart, 10);
+      const end = partialend ? parseInt(partialend, 10) : total - 1;
+      const chunksize = (end - start) + 1;
+
+      res.writeHead(206, {
+        "Content-Range": `bytes ${start}-${end}/${total}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": chunksize,
+        "Content-Type": track.type || "audio/mpeg",
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*"
+      });
+      fs.createReadStream(TRACK_PATH, { start, end }).pipe(res);
+    } else {
+      res.writeHead(200, {
+        "Content-Length": total,
+        "Accept-Ranges": "bytes",
+        "Content-Type": track.type || "audio/mpeg",
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+        "Content-Disposition": `inline; filename="${asciiFilename(track.name)}"`
+      });
+      fs.createReadStream(TRACK_PATH).pipe(res);
+    }
     return;
   }
 
@@ -291,6 +319,25 @@ function handleMessage(client, message) {
     return;
   }
 
+function extractUrl(input) {
+  const match = String(input || "").match(/https?:\/\/[^\s"'<>]+/);
+  return match ? match[0] : String(input || "").trim();
+}
+
+  if (message.type === "download-link") {
+    const raw = String(message.url || "");
+    const url = extractUrl(raw);
+    if (!url) {
+      send(client, { type: "error", message: "Invalid URL" });
+      return;
+    }
+
+    downloadTrack(url, "Downloaded Music", () => {
+      send(client, { type: "error", message: "Could not download audio from this link." });
+    });
+    return;
+  }
+
   if (message.type === "youtube-load") {
     const videoId = String(message.videoId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 20);
     if (!videoId) {
@@ -317,7 +364,8 @@ function handleMessage(client, message) {
   }
 
   if (message.type === "soundcloud-load") {
-    const url = String(message.url || "").trim();
+    const raw = String(message.url || "");
+    const url = extractUrl(raw);
     if (!url || (!url.includes("soundcloud.com") && !url.includes("on.soundcloud.com"))) {
       send(client, { type: "error", message: "Invalid SoundCloud link" });
       return;
