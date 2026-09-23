@@ -19,9 +19,16 @@
 
         <canvas id="roomCanvas" width="900" height="520" aria-label="Speaker room visualization"></canvas>
 
-        <div id="youtubePanel" class="youtubeFrame">
+        <div id="youtubePanel" class="embedFrame">
           <div id="youtubePlayer"></div>
-          <div id="youtubeStatus" class="youtubeStatus" aria-live="polite"></div>
+          <div id="youtubeStatus" class="embedStatus" aria-live="polite"></div>
+          <button id="youtubeTapToPlay" class="tapToPlayBtn" type="button">Tap here to join audio</button>
+        </div>
+
+        <div id="soundcloudPanel" class="embedFrame">
+          <iframe id="soundcloudPlayer" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/293&auto_play=false"></iframe>
+          <div id="soundcloudStatus" class="embedStatus" aria-live="polite"></div>
+          <button id="soundcloudTapToPlay" class="tapToPlayBtn" type="button">Tap here to join audio</button>
         </div>
 
         <div class="transport">
@@ -69,10 +76,16 @@
           <strong id="trackName">No track loaded</strong>
         </div>
 
-        <div class="block youtube">
+        <div class="block stream-input">
           <label for="youtubeUrl">YouTube link</label>
           <input id="youtubeUrl" type="url" placeholder="https://youtu.be/...">
           <button id="loadYoutubeBtn" type="button">Load YouTube</button>
+        </div>
+
+        <div class="block stream-input">
+          <label for="soundcloudUrl">SoundCloud link</label>
+          <input id="soundcloudUrl" type="url" placeholder="https://soundcloud.com/...">
+          <button id="loadSoundcloudBtn" type="button">Load SoundCloud</button>
         </div>
 
         <div class="block">

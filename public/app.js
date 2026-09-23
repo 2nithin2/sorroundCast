@@ -13,6 +13,12 @@ const ui = {
   loadYoutube: document.querySelector("#loadYoutubeBtn"),
   youtubePanel: document.querySelector("#youtubePanel"),
   youtubeStatus: document.querySelector("#youtubeStatus"),
+  youtubeTapToPlay: document.querySelector("#youtubeTapToPlay"),
+  soundcloudUrl: document.querySelector("#soundcloudUrl"),
+  loadSoundcloud: document.querySelector("#loadSoundcloudBtn"),
+  soundcloudPanel: document.querySelector("#soundcloudPanel"),
+  soundcloudStatus: document.querySelector("#soundcloudStatus"),
+  soundcloudTapToPlay: document.querySelector("#soundcloudTapToPlay"),
   name: document.querySelector("#deviceName"),
   role: document.querySelector("#roleSelect"),
   latency: document.querySelector("#latencyTrim"),
@@ -52,6 +58,11 @@ let youtubePlayer;
 let youtubeReady = false;
 let pendingYoutubeId = "";
 let youtubeApiPromise;
+let soundcloudWidget;
+let soundcloudReady = false;
+let pendingSoundcloudUrl = "";
+let soundcloudApiPromise;
+let soundcloudPositionSec = 0;
 let visualPhase = 0;
 
 const saved = JSON.parse(localStorage.getItem("surroundCastDevice") || "{}");
@@ -114,6 +125,7 @@ function handleMessage(message) {
     devices = message.devices || [];
     updateTrack();
     if (track?.source === "youtube") loadYoutubeVideo(track.videoId);
+    else if (track?.source === "soundcloud") loadSoundcloudTrack(track.url);
     renderDevices();
   }
 
@@ -129,6 +141,13 @@ function handleMessage(message) {
     sourceMode = "youtube";
     updateTrack();
     loadYoutubeVideo(track.videoId);
+  }
+
+  if (message.type === "soundcloud-ready") {
+    track = message.track;
+    sourceMode = "soundcloud";
+    updateTrack();
+    loadSoundcloudTrack(track.url);
   }
 
   if (message.type === "roster") {
@@ -215,7 +234,23 @@ async function initAudio() {
 async function armSpeaker() {
   await initAudio();
   await audioContext.resume();
-  if (!audio.src) loadTrack();
+  if (!audio.src && sourceMode === "file") loadTrack();
+
+  // Prime YouTube iframe inside user gesture if active
+  if (sourceMode === "youtube" && youtubePlayer && youtubeReady) {
+    try {
+      youtubePlayer.playVideo();
+      youtubePlayer.pauseVideo();
+    } catch {}
+  }
+
+  // Prime SoundCloud iframe inside user gesture if active
+  if (sourceMode === "soundcloud" && soundcloudWidget && soundcloudReady) {
+    try {
+      soundcloudWidget.play();
+      soundcloudWidget.pause();
+    } catch {}
+  }
 
   armed = true;
   ui.arm.textContent = "Speaker armed";
@@ -265,16 +300,28 @@ function applyRole() {
 }
 
 function updateTrack() {
-  ui.trackName.textContent = track?.source === "youtube"
-    ? `YouTube: ${track.name}`
-    : track?.name || "No track loaded";
-  ui.youtubePanel.classList.toggle("active", track?.source === "youtube");
+  if (track?.source === "youtube") {
+    ui.trackName.textContent = `YouTube: ${track.name}`;
+    ui.youtubePanel.classList.add("active");
+    ui.soundcloudPanel.classList.remove("active");
+  } else if (track?.source === "soundcloud") {
+    ui.trackName.textContent = `SoundCloud: ${track.name}`;
+    ui.soundcloudPanel.classList.add("active");
+    ui.youtubePanel.classList.remove("active");
+  } else {
+    ui.trackName.textContent = track?.name || "No track loaded";
+    ui.youtubePanel.classList.remove("active");
+    ui.soundcloudPanel.classList.remove("active");
+  }
 }
 
 function loadTrack() {
   if (!track) return;
   sourceMode = "file";
   ui.youtubePanel.classList.remove("active");
+  ui.soundcloudPanel.classList.remove("active");
+  ui.youtubeTapToPlay.classList.remove("show");
+  ui.soundcloudTapToPlay.classList.remove("show");
   const previous = audio.currentTime || 0;
   audio.src = `/track/current?v=${track.version}`;
   audio.load();
@@ -296,8 +343,14 @@ async function preparePlayback(message) {
 
   if (sourceMode === "youtube") {
     await ensureYoutubePlayer();
-    loadYoutubeVideo(track.videoId);
+    if (track?.videoId) await loadYoutubeVideo(track.videoId);
     if (youtubeReady) youtubePlayer.seekTo(Number(message.position || 0), true);
+  } else if (sourceMode === "soundcloud") {
+    await ensureSoundcloudPlayer();
+    if (track?.url && track.url !== pendingSoundcloudUrl) await loadSoundcloudTrack(track.url);
+    if (soundcloudWidget && soundcloudReady) {
+      soundcloudWidget.seekTo(Number(message.position || 0) * 1000);
+    }
   } else {
     await initAudio();
     await audioContext.resume();
@@ -311,25 +364,54 @@ async function preparePlayback(message) {
   preparedTimer = window.setTimeout(async () => {
     try {
       if (sourceMode === "youtube") {
-        if (youtubeReady) youtubePlayer.playVideo();
+        if (youtubeReady) {
+          youtubePlayer.playVideo();
+          // Watch for mobile autoplay rejection
+          setTimeout(() => {
+            const state = youtubePlayer.getPlayerState?.();
+            if (state !== 1 && state !== 3) {
+              ui.youtubeTapToPlay.classList.add("show");
+              ui.youtubeStatus.textContent = "Tap button below to start YouTube on this phone.";
+            }
+          }, 800);
+        }
+      } else if (sourceMode === "soundcloud") {
+        if (soundcloudWidget && soundcloudReady) {
+          soundcloudWidget.play();
+          setTimeout(() => {
+            soundcloudWidget.isPaused?.(paused => {
+              if (paused) {
+                ui.soundcloudTapToPlay.classList.add("show");
+                ui.soundcloudStatus.textContent = "Tap button below to start SoundCloud on this phone.";
+              }
+            });
+          }, 800);
+        }
       } else {
         await audio.play();
       }
     } catch (error) {
       ui.badge.textContent = "Tap Play";
       ui.badge.classList.remove("live");
+      if (sourceMode === "youtube") ui.youtubeTapToPlay.classList.add("show");
+      if (sourceMode === "soundcloud") ui.soundcloudTapToPlay.classList.add("show");
     }
   }, delayUntil(message.startAt));
 }
 
 function currentPosition() {
   if (sourceMode === "youtube" && youtubeReady) return youtubePlayer.getCurrentTime() || 0;
+  if (sourceMode === "soundcloud") return soundcloudPositionSec || 0;
   return audio.currentTime || 0;
 }
 
 function pauseCurrentSource() {
   if (sourceMode === "youtube" && youtubeReady) {
     youtubePlayer.pauseVideo();
+    return;
+  }
+  if (sourceMode === "soundcloud" && soundcloudReady && soundcloudWidget) {
+    soundcloudWidget.pause();
     return;
   }
   audio.pause();
@@ -339,6 +421,12 @@ function stopCurrentSource() {
   if (sourceMode === "youtube" && youtubeReady) {
     youtubePlayer.stopVideo();
     youtubePlayer.seekTo(0, true);
+    return;
+  }
+  if (sourceMode === "soundcloud" && soundcloudReady && soundcloudWidget) {
+    soundcloudWidget.pause();
+    soundcloudWidget.seekTo(0);
+    soundcloudPositionSec = 0;
     return;
   }
   audio.pause();
@@ -382,17 +470,27 @@ function ensureYoutubePlayer() {
         width: "100%",
         height: "220",
         playerVars: {
+          enablejsapi: 1,
           playsinline: 1,
           modestbranding: 1,
-          rel: 0,
-          origin: window.location.origin
+          rel: 0
         },
         events: {
           onReady: () => {
             youtubeReady = true;
-            if (pendingYoutubeId) youtubePlayer.cueVideoById(pendingYoutubeId);
-            ui.youtubeStatus.textContent = pendingYoutubeId ? "YouTube video loaded" : "YouTube player ready";
+            if (pendingYoutubeId) {
+              youtubePlayer.cueVideoById(pendingYoutubeId);
+            }
+            ui.youtubeStatus.textContent = pendingYoutubeId ? "YouTube video ready" : "YouTube player ready";
             resolve();
+          },
+          onStateChange: event => {
+            if (event.data === 1) { // PLAYING
+              ui.youtubeTapToPlay.classList.remove("show");
+              ui.youtubeStatus.textContent = "YouTube playing in sync";
+            } else if (event.data === 2) { // PAUSED
+              ui.youtubeStatus.textContent = "YouTube paused";
+            }
           },
           onError: event => {
             ui.youtubeStatus.textContent = youtubeErrorText(event.data);
@@ -432,17 +530,109 @@ function youtubeErrorText(code) {
 async function loadYoutubeVideo(videoId) {
   sourceMode = "youtube";
   pendingYoutubeId = videoId;
+  ui.soundcloudPanel.classList.remove("active");
   ui.youtubePanel.classList.add("active");
   ui.youtubeStatus.textContent = "Loading YouTube player...";
+  ui.youtubeTapToPlay.classList.remove("show");
   audio.pause();
+  if (soundcloudWidget && soundcloudReady) soundcloudWidget.pause();
   try {
     await ensureYoutubePlayer();
     if (youtubeReady) {
       youtubePlayer.cueVideoById(videoId);
-      ui.youtubeStatus.textContent = "YouTube video loaded";
+      ui.youtubeStatus.textContent = "YouTube video ready";
     }
   } catch {
     ui.badge.textContent = "YouTube error";
+    ui.badge.classList.remove("live");
+  }
+}
+
+function ensureSoundcloudPlayer() {
+  if (soundcloudApiPromise) return soundcloudApiPromise;
+
+  soundcloudApiPromise = new Promise((resolve, reject) => {
+    const initWidget = () => {
+      if (!window.SC?.Widget) {
+        setTimeout(initWidget, 80);
+        return;
+      }
+      const iframe = document.querySelector("#soundcloudPlayer");
+      soundcloudWidget = window.SC.Widget(iframe);
+      soundcloudWidget.bind(window.SC.Widget.Events.READY, () => {
+        soundcloudReady = true;
+        ui.soundcloudStatus.textContent = "SoundCloud player ready";
+        resolve();
+      });
+      soundcloudWidget.bind(window.SC.Widget.Events.PLAY, () => {
+        ui.soundcloudTapToPlay.classList.remove("show");
+        ui.soundcloudStatus.textContent = "SoundCloud playing in sync";
+      });
+      soundcloudWidget.bind(window.SC.Widget.Events.PAUSE, () => {
+        ui.soundcloudStatus.textContent = "SoundCloud paused";
+      });
+      soundcloudWidget.bind(window.SC.Widget.Events.PLAY_PROGRESS, data => {
+        if (data && typeof data.currentPosition === "number") {
+          soundcloudPositionSec = data.currentPosition / 1000;
+        }
+      });
+      soundcloudWidget.bind(window.SC.Widget.Events.ERROR, () => {
+        ui.soundcloudStatus.textContent = "SoundCloud error: Unable to load track.";
+      });
+    };
+
+    if (window.SC?.Widget) {
+      initWidget();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://w.soundcloud.com/player/api.js";
+    script.onload = initWidget;
+    script.onerror = () => {
+      soundcloudApiPromise = null;
+      ui.soundcloudStatus.textContent = "Could not load SoundCloud Widget API.";
+      reject(new Error("SoundCloud API failed to load"));
+    };
+    document.head.append(script);
+  });
+
+  return soundcloudApiPromise;
+}
+
+async function loadSoundcloudTrack(url) {
+  sourceMode = "soundcloud";
+  pendingSoundcloudUrl = url;
+  ui.youtubePanel.classList.remove("active");
+  ui.soundcloudPanel.classList.add("active");
+  ui.soundcloudStatus.textContent = "Loading SoundCloud track...";
+  ui.soundcloudTapToPlay.classList.remove("show");
+  audio.pause();
+  if (youtubePlayer && youtubeReady) youtubePlayer.pauseVideo();
+
+  try {
+    await ensureSoundcloudPlayer();
+    if (soundcloudWidget && soundcloudReady) {
+      soundcloudWidget.load(url, {
+        auto_play: false,
+        show_artwork: true,
+        show_comments: false,
+        buying: false,
+        sharing: false,
+        download: false,
+        callback: () => {
+          ui.soundcloudStatus.textContent = "SoundCloud track ready";
+          soundcloudWidget.getCurrentSound(sound => {
+            if (sound?.title) {
+              const displayName = `${sound.user?.username ? sound.user.username + " - " : ""}${sound.title}`;
+              ui.trackName.textContent = `SoundCloud: ${displayName}`;
+            }
+          });
+        }
+      });
+    }
+  } catch {
+    ui.badge.textContent = "SoundCloud error";
     ui.badge.classList.remove("live");
   }
 }
@@ -514,6 +704,20 @@ ui.file.addEventListener("change", async () => {
 
 ui.arm.addEventListener("click", armSpeaker);
 
+ui.youtubeTapToPlay.addEventListener("click", () => {
+  if (youtubePlayer && youtubeReady) {
+    youtubePlayer.playVideo();
+    ui.youtubeTapToPlay.classList.remove("show");
+  }
+});
+
+ui.soundcloudTapToPlay.addEventListener("click", () => {
+  if (soundcloudWidget && soundcloudReady) {
+    soundcloudWidget.play();
+    ui.soundcloudTapToPlay.classList.remove("show");
+  }
+});
+
 ui.loadYoutube.addEventListener("click", async () => {
   const videoId = parseYoutubeId(ui.youtubeUrl.value);
   if (!videoId) {
@@ -524,6 +728,7 @@ ui.loadYoutube.addEventListener("click", async () => {
 
   await armSpeaker();
   sourceMode = "youtube";
+  ui.soundcloudPanel.classList.remove("active");
   ui.youtubePanel.classList.add("active");
   ui.youtubeStatus.textContent = "Sending YouTube link to connected speakers...";
   send({
@@ -533,9 +738,29 @@ ui.loadYoutube.addEventListener("click", async () => {
   });
 });
 
+ui.loadSoundcloud.addEventListener("click", async () => {
+  const url = ui.soundcloudUrl.value.trim();
+  if (!url || (!url.includes("soundcloud.com") && !url.includes("on.soundcloud.com"))) {
+    ui.trackName.textContent = "Paste a valid SoundCloud link";
+    ui.soundcloudStatus.textContent = "Paste a SoundCloud link (e.g. https://soundcloud.com/artist/track).";
+    return;
+  }
+
+  await armSpeaker();
+  sourceMode = "soundcloud";
+  ui.youtubePanel.classList.remove("active");
+  ui.soundcloudPanel.classList.add("active");
+  ui.soundcloudStatus.textContent = "Sending SoundCloud link to connected speakers...";
+  send({
+    type: "soundcloud-load",
+    url,
+    name: "SoundCloud Track"
+  });
+});
+
 ui.play.addEventListener("click", async () => {
   await armSpeaker();
-  if (sourceMode !== "youtube" && !audio.src) loadTrack();
+  if (sourceMode === "file" && !audio.src) loadTrack();
   send({ type: "prepare", source: sourceMode, position: currentPosition() });
 });
 
@@ -728,7 +953,8 @@ function drawStarfield(w, h, energy) {
 }
 
 function currentSpectrum() {
-  const fallbackEnergy = sourceMode === "youtube" && youtubeReady ? 0.24 + Math.sin(visualPhase * 2) * 0.08 : 0.1;
+  const isExternalStream = (sourceMode === "youtube" && youtubeReady) || (sourceMode === "soundcloud" && soundcloudReady);
+  const fallbackEnergy = isExternalStream ? 0.24 + Math.sin(visualPhase * 2) * 0.08 : 0.1;
   if (!analyser) {
     return {
       data: new Uint8Array(0),

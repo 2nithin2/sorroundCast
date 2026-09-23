@@ -308,6 +308,24 @@ function handleMessage(client, message) {
     return;
   }
 
+  if (message.type === "soundcloud-load") {
+    const url = String(message.url || "").trim();
+    if (!url || (!url.includes("soundcloud.com") && !url.includes("on.soundcloud.com"))) {
+      send(client, { type: "error", message: "Invalid SoundCloud link" });
+      return;
+    }
+
+    const meta = {
+      source: "soundcloud",
+      url,
+      name: String(message.name || "SoundCloud Track").slice(0, 120),
+      version: Date.now()
+    };
+    saveTrackMeta(meta);
+    broadcast({ type: "soundcloud-ready", track: meta });
+    return;
+  }
+
   if (message.type === "prepare") {
     broadcast({
       type: "prepare",

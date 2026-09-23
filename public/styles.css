@@ -100,29 +100,62 @@ h1 {
   background: #0f1513;
 }
 
-.youtubeFrame {
+.embedFrame {
   display: none;
-  min-height: 180px;
+  position: relative;
+  min-height: 166px;
   border: 1px solid var(--line);
   background: #050807;
 }
 
-.youtubeFrame.active {
+.embedFrame.active {
   display: block;
 }
 
-.youtubeFrame iframe {
+.embedFrame iframe {
   display: block;
   width: 100%;
-  height: 220px;
   border: 0;
 }
 
-.youtubeStatus {
+#youtubePanel iframe {
+  height: 220px;
+}
+
+#soundcloudPanel iframe {
+  height: 166px;
+}
+
+.embedStatus {
   min-height: 34px;
   padding: 8px 10px;
   color: var(--muted);
   font-size: 0.86rem;
+  background: rgba(17, 22, 20, 0.85);
+  border-top: 1px solid var(--line);
+}
+
+.tapToPlayBtn {
+  display: none;
+  width: 100%;
+  padding: 12px;
+  background: var(--accent);
+  color: #10201a;
+  border: 0;
+  font-weight: 800;
+  font-size: 0.95rem;
+  cursor: pointer;
+  animation: pulseBtn 1.5s infinite;
+}
+
+.tapToPlayBtn.show {
+  display: block;
+}
+
+@keyframes pulseBtn {
+  0% { opacity: 0.9; }
+  50% { opacity: 1; filter: brightness(1.15); }
+  100% { opacity: 0.9; }
 }
 
 .transport {
@@ -206,6 +239,7 @@ input[type="range"] {
   overflow-wrap: anywhere;
 }
 
+.stream-input,
 .youtube {
   grid-template-columns: 1fr;
 }
