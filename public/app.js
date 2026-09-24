@@ -124,6 +124,7 @@ function handleMessage(message) {
     updateTrack();
     if (track?.source === "youtube") loadYoutubeVideo(track.videoId);
     else if (track?.source === "soundcloud") loadSoundcloudTrack(track.url);
+    else if (track) loadTrack();
     renderDevices();
   }
 
@@ -370,16 +371,35 @@ async function preparePlayback(message) {
       } else if (sourceMode === "soundcloud") {
         if (soundcloudWidget && soundcloudReady) soundcloudWidget.play();
       } else {
+        if (audioContext && audioContext.state === "suspended") {
+          await audioContext.resume();
+        }
         await audio.play();
         ui.audioTapToPlay?.classList.remove("show");
+        ui.badge.textContent = "Live";
+        ui.badge.classList.add("live");
       }
     } catch (error) {
+      console.warn("Playback start interrupted or blocked:", error);
       ui.badge.textContent = "Tap to Join";
       ui.badge.classList.remove("live");
       if (sourceMode === "file") ui.audioTapToPlay?.classList.add("show");
     }
   }, delayUntil(message.startAt));
 }
+
+audio.addEventListener("error", () => {
+  console.error("Audio error:", audio.error);
+  ui.badge.textContent = "Audio Error";
+  ui.badge.classList.remove("live");
+  ui.audioTapToPlay?.classList.add("show");
+});
+
+audio.addEventListener("playing", () => {
+  ui.badge.textContent = "Live";
+  ui.badge.classList.add("live");
+  ui.audioTapToPlay?.classList.remove("show");
+});
 
 function currentPosition() {
   if (sourceMode === "youtube" && youtubeReady) return youtubePlayer.getCurrentTime() || 0;

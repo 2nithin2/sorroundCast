@@ -82,7 +82,18 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.method === "GET" && url.pathname === "/track/current") {
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Range, Content-Type, Accept",
+      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length"
+    });
+    res.end();
+    return;
+  }
+
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/track/current") {
     if (!track || !fs.existsSync(TRACK_PATH)) {
       sendJson(res, 404, { error: "No track uploaded yet." });
       return;
@@ -91,6 +102,14 @@ const server = http.createServer((req, res) => {
     const stat = fs.statSync(TRACK_PATH);
     const total = stat.size;
     const range = req.headers.range;
+
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      "Access-Control-Allow-Headers": "Range, Content-Type, Accept",
+      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length",
+      "Cache-Control": "no-store"
+    };
 
     if (range) {
       const parts = range.replace(/bytes=/, "").split("-");
@@ -102,24 +121,30 @@ const server = http.createServer((req, res) => {
       const chunksize = (end - start) + 1;
 
       res.writeHead(206, {
+        ...corsHeaders,
         "Content-Range": `bytes ${start}-${end}/${total}`,
         "Accept-Ranges": "bytes",
         "Content-Length": chunksize,
-        "Content-Type": track.type || "audio/mpeg",
-        "Cache-Control": "no-store",
-        "Access-Control-Allow-Origin": "*"
+        "Content-Type": track.type || "audio/mpeg"
       });
-      fs.createReadStream(TRACK_PATH, { start, end }).pipe(res);
+      if (req.method === "HEAD") {
+        res.end();
+      } else {
+        fs.createReadStream(TRACK_PATH, { start, end }).pipe(res);
+      }
     } else {
       res.writeHead(200, {
+        ...corsHeaders,
         "Content-Length": total,
         "Accept-Ranges": "bytes",
         "Content-Type": track.type || "audio/mpeg",
-        "Cache-Control": "no-store",
-        "Access-Control-Allow-Origin": "*",
         "Content-Disposition": `inline; filename="${asciiFilename(track.name)}"`
       });
-      fs.createReadStream(TRACK_PATH).pipe(res);
+      if (req.method === "HEAD") {
+        res.end();
+      } else {
+        fs.createReadStream(TRACK_PATH).pipe(res);
+      }
     }
     return;
   }
